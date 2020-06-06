@@ -1,0 +1,28 @@
+{{if .Success}}
+	<p>Bitte klicke in discord auf den Bestätigungslink.</p>
+{{else}}
+	<h1>Erstelle ein RBU Account</h1>
+	<form method="POST">
+		<label>Benutzername:</label><br/>
+		<input type="text" name="username"><br/>
+		<label>E-Mail:</label><br/>
+		<input type="text" name="email"><br/>
+		<label>Discordbenutzername (ohne ####):</label><br/>
+		<input type="text" name="discordUser"><br/>
+		<label>Passwort:</label><br/>
+		<input name="password"><br/>
+		<input type="submit" name="createAccount" value="Account erstellen">
+	</form>
+{{end}}
+{{if .WrongAccount.User}}
+	<p>Ungültiger Benutzername. Benutzer müssen klein geschrieben werden, dürfen höchstens aus 40 Zeichen bestehen. Alle Zeichen müssen zudem alphanumerisch sein. "-", "_" und "." sind auch erlaubt.</p>
+{{end}}
+{{if .WrongAccount.Email}}
+	<p>Ungültige E-Mail-Adresse.</p>
+{{end}}
+{{if .WrongAccount.Pass}}
+	<p>Ungültiges Passwort. Passwörter müssen 8 bis 255 Zeichen lang sein. Außerdem muss ein Groß- und Kleichbuchstabe, eine Ziffer und ein Sonderzeichen enthalten sein</p>
+{{end}}
+{{if .WrongAccount.DiscordUser}}
+	<p>Discordbenutzer ist nicht auf den RBU server. Beachte den tag wegzulassen.</p>
+{{end}}

@@ -1,0 +1,15 @@
+Gitea:
+user:
+- less than 40 characters
+- Username should contain only alphanumeric, dash ('-'), underscore ('_') and dot ('.') characters.
+- no ü,ä,ö
+password:
+- at least 6 characters
+- at most 255 characters
+- At least one uppercase character
+- At least one digit
+-  At least one special character (punctuation, brackets, quotes, etc.)
+-  At least one lowercase character
+Moodle:
+user:
+- only lowercase

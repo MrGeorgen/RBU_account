@@ -32,7 +32,7 @@ type registertmpl struct {
 	Success bool
 	WrongAccount WrongAccount
 }
-type submitStruct struct {
+type SubmitStruct struct {
 	Success bool
 }
 type secrets_json struct {
@@ -46,8 +46,7 @@ func main() {
 	var newRbuMember *discordgo.Member
 	var dmChannel *discordgo.Channel
 	var err error
-	var submitStruct submitStruct
-	var secret secrets_json
+	var SubmitStruct SubmitStruct
 	var jsonfile *os.File
 	jsonfile, err = os.Open("secrets.json")
 	log(err)
@@ -57,8 +56,10 @@ func main() {
 	err = json.Unmarshal(jsondata, &secret)
 	log(err)
 	jsonfile.Close()
-	discord, _ = discordgo.New("Bot " + secret.DiscordToken)
-	discord.Open()
+	discord, err = discordgo.New("Bot " + secret.DiscordToken)
+	log(err)
+	err = discord.Open()
+	log(err)
 	db, err := sql.Open("mysql", secret.MysqlIndentify)
 	log(err)
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS account(" +
@@ -70,6 +71,7 @@ func main() {
 		");")
 	log(err)
 	tmpl := template.Must(template.ParseFiles("tmpl/register.html"))
+	submitTmpl := template.Must(template.ParseFiles("tmpl/submit.html"))
 	remail := regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
 	rusername := regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
 	rpassword := regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
@@ -104,17 +106,19 @@ func main() {
 	})
 	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		token := r.FormValue("token")
-		submitStruct.Success = false
+		SubmitStruct.Success = false
 		for i, element := range cacheAccounts {
 			if element.token==token {
 				fmt.Println("token")
-				submitStruct.Success = true
+				SubmitStruct.Success = true
 				db.Exec("INSERT INTO account(username, email, password, discordUsername)" +
-					"VALUES(" + element.username + ", " + element.email + ", " + element.password + ", " + element.discordUsername)
+					"VALUES(\"" + element.username + "\", \"" + element.email + "\", \"" + element.password + "\", \"" + element.discordUsername + "\");")
 				cacheAccounts = append(cacheAccounts[:i], cacheAccounts[i+1:]...) //delete element
 				break
 			}
 		}
+		err = submitTmpl.Execute(w, SubmitStruct)
+		log(err)
 	})
 
 	http.ListenAndServe(":8080", nil)

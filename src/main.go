@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 )
 var discord *discordgo.Session
 var secret secrets_json
+var cacheAccounts []account
 type account struct {
 	email    string
 	username string
@@ -31,6 +33,10 @@ type WrongAccount struct {
 type registertmpl struct {
 	Success bool
 	WrongAccount WrongAccount
+	AlreadyEsitsInDatabase struct{
+		Username        bool
+		DiscordUsername bool
+	}
 }
 type SubmitStruct struct {
 	Success bool
@@ -42,7 +48,7 @@ type secrets_json struct {
 }
 
 func main() {
-	cacheAccounts := make([]account, 1)
+	cacheAccounts = make([]account, 1)
 	var newRbuMember *discordgo.Member
 	var dmChannel *discordgo.Channel
 	var err error
@@ -86,13 +92,18 @@ func main() {
 			}
 			registerstruct.WrongAccount.Email, _ = remail.MatchString(newAccount.email)
 			registerstruct.WrongAccount.Email = !registerstruct.WrongAccount.Email
-			registerstruct.WrongAccount.User = !rusername.MatchString(newAccount.username)
+			registerstruct.WrongAccount.User = !rusername.MatchString(newAccount.username) || strings.Contains(newAccount.username, "\"")
 			registerstruct.WrongAccount.Pass, _ = rpassword.MatchString(newAccount.password)
 			registerstruct.WrongAccount.Pass = !registerstruct.WrongAccount.Pass
 			newRbuMember, registerstruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername)
 			registerstruct.WrongAccount.DiscordUser = !registerstruct.WrongAccount.DiscordUser
-			if !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser {
-				registerstruct.Success = true
+			{
+				var username string
+				registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("select username from account where username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
+				registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("select username from account where discordUsername = ?", newAccount.discordUsername).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordUsername)
+			}
+			registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
+			if registerstruct.Success {
 				newAccount.token, err = GenerateRandomStringURLSafe(64)
 				log(err)
 				dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
@@ -139,3 +150,20 @@ func log(err error)  {
 	}
 }
 
+func UsernameExistsInMem(username string) bool {
+	for _, element := range cacheAccounts {
+		if element.username == username {
+			return true
+		}
+	}
+	return false
+}
+
+func discordUsernameExistsInMem(discordUsername string) bool {
+	for _, element := range cacheAccounts {
+		if element.discordUsername == discordUsername {
+			return true
+		}
+	}
+	return false
+}

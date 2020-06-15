@@ -26,3 +26,9 @@
 {{if .WrongAccount.DiscordUser}}
 	<p>Discordbenutzer ist nicht auf den RBU server. Beachte den tag wegzulassen.</p>
 {{end}}
+{{if .AlreadyEsitsInDatabase.Username}}
+	<p>Diesen Benutzername ist leider schon vergeben.</p>
+{{end}}
+{{if .AlreadyEsitsInDatabase.DiscordUsername}}
+	<p>Dieses RBU Mitglied hat bereits einen Account.</p>
+{{end}}

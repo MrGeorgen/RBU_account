@@ -1,28 +1,33 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/dlclark/regexp2"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/zaddok/moodle"
 	"html/template"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"golang.org/x/crypto/argon2"
+	"context"
+	"time"
+	"github.com/cornelk/hashmap"
 )
 var discord *discordgo.Session
 var secret secrets_json
-var cacheAccounts []account
+var cacheAccounts hashmap.HashMap
 type account struct {
 	email    string
 	username string
 	password string
 	discordUsername string
-	token string
 }
 type WrongAccount struct {
 	User  bool
@@ -45,10 +50,10 @@ type secrets_json struct {
 	DiscordToken    string `json:"discordToken"`
 	MysqlIndentify  string `json:"mysqlIndentify"`
 	DiscordServerID string `json:"discordServerID"`
+	MoodleToken string `json:"moodleToken"`
 }
 
 func main() {
-	cacheAccounts = make([]account, 1)
 	var newRbuMember *discordgo.Member
 	var dmChannel *discordgo.Channel
 	var err error
@@ -62,6 +67,7 @@ func main() {
 	err = json.Unmarshal(jsondata, &secret)
 	log(err)
 	jsonfile.Close()
+	discordgo.MakeIntent(discordgo.IntentsAll)
 	discord, err = discordgo.New("Bot " + secret.DiscordToken)
 	log(err)
 	err = discord.Open()
@@ -71,11 +77,14 @@ func main() {
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS account(" +
 		"username varchar(40) NOT NULL, " +
 		"email varchar(255) NOT NULL, " +
-		"password varchar(255) NOT NULL, " +
+		"hash TINYBLOB NOT NULL, " +
+		"salt TINYBLOB NOT NULL, " +
 		"discordUsername varchar(32) NOT NULL, " +
 		"PRIMARY KEY ( username )" +
 		");")
 	log(err)
+	moodle := moodle.NewMoodleApi("https://exam.redstoneunion.de/", secret.MoodleToken)
+	_ = moodle
 	tmpl := template.Must(template.ParseFiles("tmpl/register.html"))
 	submitTmpl := template.Must(template.ParseFiles("tmpl/submit.html"))
 	remail := regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
@@ -104,12 +113,12 @@ func main() {
 			}
 			registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
 			if registerstruct.Success {
-				newAccount.token, err = GenerateRandomStringURLSafe(64)
+				token, err := GenerateRandomStringURLSafe(64)
 				log(err)
 				dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
 				log(err)
-				discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token="+newAccount.token)
-				cacheAccounts = append(cacheAccounts, newAccount)
+				discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token=" + token)
+				cacheAccounts.Set(token, newAccount)
 			}
 		}
 		tmpl.Execute(w, registerstruct)
@@ -117,16 +126,27 @@ func main() {
 	})
 	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		token := r.FormValue("token")
-		SubmitStruct.Success = false
-		for i, element := range cacheAccounts {
-			if element.token==token {
-				fmt.Println("token")
-				SubmitStruct.Success = true
-				db.Exec("INSERT INTO account(username, email, password, discordUsername)" +
-					"VALUES(\"" + element.username + "\", \"" + element.email + "\", \"" + element.password + "\", \"" + element.discordUsername + "\");")
-				cacheAccounts = append(cacheAccounts[:i], cacheAccounts[i+1:]...) //delete element
-				break
-			}
+		var accInter interface{}
+		accInter, SubmitStruct.Success = cacheAccounts.GetStringKey(token)
+		var account account = accInter.(account)
+		if SubmitStruct.Success {
+			fmt.Println(token);
+			salt := make([]byte, 32)
+			_, err := rand.Read(salt)
+			log(err)
+			hash := argon2.IDKey([]byte(account.password), salt[:], 1, 64*1024, 4, 32)
+			// add user to the database
+			query := "INSERT INTO account(username, email, hash, salt, discordUsername) VALUES (?, ?, ?, ?, ?)"
+			ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelfunc()
+			stmt, err := db.PrepareContext(ctx, query)
+			log(err)
+			defer stmt.Close()
+			_, err = stmt.ExecContext(ctx, account.username, account.email, hash, salt, account.discordUsername)
+			log(err)
+			//_, err = moodle.AddUser(account.username, account.username, account.email, account.username, account.password)
+			log(err)
+			cacheAccounts.Del(token)
 		}
 		err = submitTmpl.Execute(w, SubmitStruct)
 		log(err)
@@ -151,8 +171,11 @@ func log(err error)  {
 }
 
 func UsernameExistsInMem(username string) bool {
-	for _, element := range cacheAccounts {
-		if element.username == username {
+	for key := range cacheAccounts.Iter() {
+		var accInter interface{}
+		accInter, _ = cacheAccounts.Get(key)
+		var account account = accInter.(account)
+		if account.username == username {
 			return true
 		}
 	}
@@ -160,8 +183,11 @@ func UsernameExistsInMem(username string) bool {
 }
 
 func discordUsernameExistsInMem(discordUsername string) bool {
-	for _, element := range cacheAccounts {
-		if element.discordUsername == discordUsername {
+	for key := range cacheAccounts.Iter() {
+		var accInter interface{}
+		accInter, _ = cacheAccounts.Get(key)
+		var account account = accInter.(account)
+		if account.discordUsername == discordUsername {
 			return true
 		}
 	}

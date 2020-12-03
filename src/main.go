@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/dlclark/regexp2"
 	_ "github.com/go-sql-driver/mysql"
@@ -19,6 +18,7 @@ import (
 	"context"
 	"time"
 	"github.com/cornelk/hashmap"
+	"code.gitea.io/sdk/gitea"
 )
 var discord *discordgo.Session
 var secret secrets_json
@@ -51,6 +51,7 @@ type secrets_json struct {
 	MysqlIndentify  string `json:"mysqlIndentify"`
 	DiscordServerID string `json:"discordServerID"`
 	MoodleToken string `json:"moodleToken"`
+	GiteaToken string `json:"giteaToken"`
 }
 
 func main() {
@@ -82,6 +83,8 @@ func main() {
 		"discordUsername varchar(32) NOT NULL, " +
 		"PRIMARY KEY ( username )" +
 		");")
+	log(err)
+	giteaClient, err := gitea.NewClient("https://git.redstoneunion.de", gitea.SetToken(secret.GiteaToken))
 	log(err)
 	moodle := moodle.NewMoodleApi("https://exam.redstoneunion.de/", secret.MoodleToken)
 	_ = moodle
@@ -122,7 +125,6 @@ func main() {
 			}
 		}
 		tmpl.Execute(w, registerstruct)
-		fmt.Println(registerstruct)
 	})
 	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		token := r.FormValue("token")
@@ -130,11 +132,11 @@ func main() {
 		accInter, SubmitStruct.Success = cacheAccounts.GetStringKey(token)
 		var account account = accInter.(account)
 		if SubmitStruct.Success {
-			fmt.Println(token);
+			cacheAccounts.Del(token)
 			salt := make([]byte, 32)
 			_, err := rand.Read(salt)
 			log(err)
-			hash := argon2.IDKey([]byte(account.password), salt[:], 1, 64*1024, 4, 32)
+			hash := argon2.IDKey([]byte(account.password), salt, 1, 64*1024, 4, 32)
 			// add user to the database
 			query := "INSERT INTO account(username, email, hash, salt, discordUsername) VALUES (?, ?, ?, ?, ?)"
 			ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
@@ -144,9 +146,18 @@ func main() {
 			defer stmt.Close()
 			_, err = stmt.ExecContext(ctx, account.username, account.email, hash, salt, account.discordUsername)
 			log(err)
-			//_, err = moodle.AddUser(account.username, account.username, account.email, account.username, account.password)
+			//_, err = moodle.AddUser(account.username + "wg", account.username, account.email, account.username, account.password)
 			log(err)
-			cacheAccounts.Del(token)
+			opt := gitea.CreateUserOption{
+				Email:      account.email,
+				Username:   account.username,
+				SourceID:   0,
+				Password:   account.password,
+				SendNotify: false,
+			}
+			_, _, err = giteaClient.AdminCreateUser(opt)
+			log(err)
+
 		}
 		err = submitTmpl.Execute(w, SubmitStruct)
 		log(err)

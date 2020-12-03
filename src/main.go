@@ -28,6 +28,8 @@ type account struct {
 	username string
 	password string
 	discordUsername string
+	discordTag string
+	discordId string
 }
 type WrongAccount struct {
 	User  bool
@@ -58,7 +60,6 @@ func main() {
 	var newRbuMember *discordgo.Member
 	var dmChannel *discordgo.Channel
 	var err error
-	var SubmitStruct SubmitStruct
 	var jsonfile *os.File
 	jsonfile, err = os.Open("secrets.json")
 	log(err)
@@ -93,45 +94,60 @@ func main() {
 	remail := regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
 	rusername := regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
 	rpassword := regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
-	registerstruct := registertmpl{}
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		registerstruct := registertmpl{}
 		if r.Method == http.MethodPost {
-			newAccount := account{
-				email:    r.FormValue("email"),
-				username: r.FormValue("username"),
-				password: r.FormValue("password"),
-				discordUsername: r.FormValue("discordUser"),
+			var newAccount account
+			var split = strings.Split(r.FormValue("discordUser"), "#")
+			if len(split) == 2 {
+				newAccount = account{
+					email:    r.FormValue("email"),
+					username: r.FormValue("username"),
+					password: r.FormValue("password"),
+					discordUsername: split[0],
+					discordTag: split[1],
+				}
 			}
 			registerstruct.WrongAccount.Email, _ = remail.MatchString(newAccount.email)
 			registerstruct.WrongAccount.Email = !registerstruct.WrongAccount.Email
 			registerstruct.WrongAccount.User = !rusername.MatchString(newAccount.username) || strings.Contains(newAccount.username, "\"")
 			registerstruct.WrongAccount.Pass, _ = rpassword.MatchString(newAccount.password)
 			registerstruct.WrongAccount.Pass = !registerstruct.WrongAccount.Pass
-			newRbuMember, registerstruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername)
+			newRbuMember, registerstruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername, newAccount.discordTag)
 			registerstruct.WrongAccount.DiscordUser = !registerstruct.WrongAccount.DiscordUser
+			if registerstruct.WrongAccount.DiscordUser {
+				goto registerReturn
+			}
+			newAccount.discordId = newRbuMember.User.ID
 			{
 				var username string
 				registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("select username from account where username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
-				registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("select username from account where discordUsername = ?", newAccount.discordUsername).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordUsername)
+				registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("select username from account where discordUsername = ?", newAccount.discordUsername).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
 			}
 			registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
-			if registerstruct.Success {
+			if !registerstruct.Success {
+				goto registerReturn
+			}
 				token, err := GenerateRandomStringURLSafe(64)
 				log(err)
 				dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
 				log(err)
 				discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token=" + token)
 				cacheAccounts.Set(token, newAccount)
-			}
 		}
-		tmpl.Execute(w, registerstruct)
+		registerReturn: err = tmpl.Execute(w, registerstruct)
+		log(err)
 	})
 	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
+		var submitStruct SubmitStruct
 		token := r.FormValue("token")
 		var accInter interface{}
-		accInter, SubmitStruct.Success = cacheAccounts.GetStringKey(token)
-		var account account = accInter.(account)
-		if SubmitStruct.Success {
+		accInter, submitStruct.Success = cacheAccounts.GetStringKey(token)
+		if !submitStruct.Success {
+			goto submitReturn
+		}
+		{
+			var account account = accInter.(account)
 			cacheAccounts.Del(token)
 			salt := make([]byte, 32)
 			_, err := rand.Read(salt)
@@ -157,19 +173,19 @@ func main() {
 			}
 			_, _, err = giteaClient.AdminCreateUser(opt)
 			log(err)
-
 		}
-		err = submitTmpl.Execute(w, SubmitStruct)
+
+		submitReturn: err = submitTmpl.Execute(w, submitStruct)
 		log(err)
 	})
 
 	http.ListenAndServe(":8080", nil)
 }
-func getRbuMember(user string) (*discordgo.Member, bool) {
+func getRbuMember(user string, tag string) (*discordgo.Member, bool) {
 	allUsers, err := discord.GuildMembers(secret.DiscordServerID, "0", 1000)
 	log(err)
 	for _, element := range allUsers {
-		if element.User.Username==user {
+		if element.User.Username == user && element.User.Discriminator == tag{
 			return element, true
 		}
 	}
@@ -193,12 +209,12 @@ func UsernameExistsInMem(username string) bool {
 	return false
 }
 
-func discordUsernameExistsInMem(discordUsername string) bool {
+func discordUsernameExistsInMem(id string) bool {
 	for key := range cacheAccounts.Iter() {
 		var accInter interface{}
 		accInter, _ = cacheAccounts.Get(key)
 		var account account = accInter.(account)
-		if account.discordUsername == discordUsername {
+		if account.discordId == id {
 			return true
 		}
 	}

@@ -3,12 +3,14 @@ module git.redstoneunion.de/MrGeorgen/RBU_account
 go 1.14
 
 require (
+	code.gitea.io/sdk/gitea v0.13.1
 	github.com/bwmarrin/discordgo v0.22.0
 	github.com/cornelk/hashmap v1.0.1
 	github.com/dlclark/regexp2 v1.4.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/hashicorp/go-version v1.2.1 // indirect
 	github.com/tidwall/rhh v1.1.1 // indirect
 	github.com/tidwall/shardmap v0.0.0-20190927132224-c190691bd211
 	github.com/zaddok/moodle v0.6.6

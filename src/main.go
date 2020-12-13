@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"golang.org/x/crypto/argon2"
 	"context"
 	"time"
@@ -26,6 +25,7 @@ var config config_json
 var cacheAccounts hashmap.HashMap
 var db *sql.DB
 var giteaClient *gitea.Client
+var registerTmpl *template.Template
 type account struct {
 	email    string
 	username string
@@ -98,57 +98,12 @@ func main() {
 	log(err)
 	moodle := moodle.NewMoodleApi("https://exam.redstoneunion.de/", secret.MoodleToken)
 	_ = moodle
-	tmpl := template.Must(template.ParseFiles("tmpl/register.html"))
+	registerTmpl = template.Must(template.ParseFiles("tmpl/register.html"))
 	submitTmpl := template.Must(template.ParseFiles("tmpl/submit.html"))
-	remail := regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
-	rusername := regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
-	rpassword := regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
-	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
-		registerstruct := registertmpl{}
-		if r.Method == http.MethodPost {
-			var newAccount account
-			var newRbuMember *discordgo.Member
-			var split = strings.Split(r.FormValue("discordUser"), "#")
-			newAccount = account{
-				email:    r.FormValue("email"),
-				username: r.FormValue("username"),
-				password: r.FormValue("password"),
-			}
-			if len(split) == 2 {
-				newAccount.discordUsername = split[0]
-				newAccount.discordTag = split[1]
-			}
-			registerstruct.WrongAccount.Email, _ = remail.MatchString(newAccount.email)
-			registerstruct.WrongAccount.Email = !registerstruct.WrongAccount.Email
-			registerstruct.WrongAccount.User = !rusername.MatchString(newAccount.username)
-			registerstruct.WrongAccount.Pass, _ = rpassword.MatchString(newAccount.password)
-			registerstruct.WrongAccount.Pass = !registerstruct.WrongAccount.Pass
-			newRbuMember, registerstruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername, newAccount.discordTag)
-			registerstruct.WrongAccount.DiscordUser = !registerstruct.WrongAccount.DiscordUser
-			if registerstruct.WrongAccount.DiscordUser {
-				goto registerReturn
-			}
-			newAccount.discordId = newRbuMember.User.ID
-			{
-				var username string
-				registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("select username from account where username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
-				registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("select username from account where discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
-			}
-			registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
-			if !registerstruct.Success {
-				goto registerReturn
-			}
-				token, err := GenerateRandomStringURLSafe(64)
-				log(err)
-				var dmChannel *discordgo.Channel
-				dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
-				log(err)
-				discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token=" + token)
-				cacheAccounts.Set(token, newAccount)
-		}
-		registerReturn: err = tmpl.Execute(w, registerstruct)
-		log(err)
-	})
+	remail = regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
+	rusername = regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
+	rpassword = regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
+	http.HandleFunc("/register", register)
 	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
 		var submitStruct SubmitStruct
 		token := r.FormValue("token")

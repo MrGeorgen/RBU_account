@@ -1,3 +1,4 @@
 {
-	"createGiteaAccount": false
+	"createGiteaAccount": false,
+	"port": 8080
 }

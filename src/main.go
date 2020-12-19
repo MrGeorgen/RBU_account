@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"github.com/bwmarrin/discordgo"
@@ -13,11 +12,10 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"golang.org/x/crypto/argon2"
-	"context"
-	"time"
 	"github.com/cornelk/hashmap"
 	"code.gitea.io/sdk/gitea"
+	"fmt"
+	"golang.org/x/crypto/argon2"
 )
 var discord *discordgo.Session
 var secret secrets_json
@@ -26,6 +24,7 @@ var cacheAccounts hashmap.HashMap
 var db *sql.DB
 var giteaClient *gitea.Client
 var registerTmpl *template.Template
+var submitTmpl *template.Template
 type account struct {
 	email    string
 	username string
@@ -60,6 +59,7 @@ type secrets_json struct {
 }
 type config_json struct {
 	CreateGiteaAccount bool `json:"createGiteaAccount"`
+	Port uint16 `json:"port"`
 }
 
 func main() {
@@ -99,65 +99,13 @@ func main() {
 	moodle := moodle.NewMoodleApi("https://exam.redstoneunion.de/", secret.MoodleToken)
 	_ = moodle
 	registerTmpl = template.Must(template.ParseFiles("tmpl/register.html"))
-	submitTmpl := template.Must(template.ParseFiles("tmpl/submit.html"))
+	submitTmpl = template.Must(template.ParseFiles("tmpl/submit.html"))
 	remail = regexp2.MustCompile("^(?=.{0,255}$)(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])$", 0)
 	rusername = regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
 	rpassword = regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
 	http.HandleFunc("/register", register)
-	http.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
-		var submitStruct SubmitStruct
-		token := r.FormValue("token")
-		var accInter interface{}
-		accInter, submitStruct.Success = cacheAccounts.GetStringKey(token)
-		if !submitStruct.Success {
-			goto submitReturn
-		}
-		{
-			var account account = accInter.(account)
-			cacheAccounts.Del(token)
-			salt := make([]byte, 32)
-			_, err := rand.Read(salt)
-			log(err)
-			hash := argon2.IDKey([]byte(account.password), salt, 1, 64*1024, 4, 32)
-			// add user to the database
-			query := "INSERT INTO account(username, email, hash, salt, discordUserId) VALUES (?, ?, ?, ?, ?)"
-			ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancelfunc()
-			stmt, err := db.PrepareContext(ctx, query)
-			log(err)
-			defer stmt.Close()
-			_, err = stmt.ExecContext(ctx, account.username, account.email, hash, salt, account.discordId)
-			log(err)
-			//_, err = moodle.AddUser(account.username + "wg", account.username, account.email, account.username, account.password)
-			log(err)
-			if config.CreateGiteaAccount {
-				opt := gitea.CreateUserOption{
-					Email:      account.email,
-					Username:   account.username,
-					SourceID:   0,
-					Password:   account.password,
-					SendNotify: false,
-				}
-				_, _, err = giteaClient.AdminCreateUser(opt)
-				log(err)
-			}
-		}
 
-		submitReturn: err = submitTmpl.Execute(w, submitStruct)
-		log(err)
-	})
-
-	http.ListenAndServe(":8080", nil)
-}
-func getRbuMember(user string, tag string) (*discordgo.Member, bool) {
-	allUsers, err := discord.GuildMembers(secret.DiscordServerID, "0", 1000)
-	log(err)
-	for _, element := range allUsers {
-		if element.User.Username == user && element.User.Discriminator == tag{
-			return element, true
-		}
-	}
-	return nil, false
+	http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
 }
 func log(err error)  {
 	if err!=nil {
@@ -165,26 +113,6 @@ func log(err error)  {
 	}
 }
 
-func UsernameExistsInMem(username string) bool {
-	for key := range cacheAccounts.Iter() {
-		var accInter interface{}
-		accInter, _ = cacheAccounts.Get(key)
-		var account account = accInter.(account)
-		if account.username == username {
-			return true
-		}
-	}
-	return false
-}
-
-func discordUsernameExistsInMem(id string) bool {
-	for key := range cacheAccounts.Iter() {
-		var accInter interface{}
-		accInter, _ = cacheAccounts.Get(key)
-		var account account = accInter.(account)
-		if account.discordId == id {
-			return true
-		}
-	}
-	return false
+func hash(password []byte, salt []byte) []byte {
+	return argon2.IDKey(password, salt, 1, 64*1024, 4, 32)
 }

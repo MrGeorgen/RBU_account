@@ -10,7 +10,9 @@ import (
 	"time"
 	"code.gitea.io/sdk/gitea"
 	"crypto/rand"
+	"github.com/cornelk/hashmap"
 )
+var cacheAccounts hashmap.HashMap
 var rusername *regexp.Regexp
 var remail *regexp2.Regexp
 var rpassword *regexp2.Regexp
@@ -43,8 +45,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 		newAccount.discordId = newRbuMember.User.ID
 		{
 			var username string
-			registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("select username from account where username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
-			registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("select username from account where discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
+			registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("SELECT username FROM account WHERE username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
+			registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("SELECT username FROM account WHERE discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
 		}
 		registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
 		if !registerstruct.Success {
@@ -76,7 +78,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			salt := make([]byte, 32)
 			_, err := rand.Read(salt)
 			log(err)
-			hash := hash([]byte(account.password), salt)
+			hash := hashFunc([]byte(account.password), salt)
 			// add user to the database
 			query := "INSERT INTO account(username, email, hash, salt, discordUserId) VALUES (?, ?, ?, ?, ?)"
 			ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)

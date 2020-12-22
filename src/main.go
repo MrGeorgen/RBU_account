@@ -24,31 +24,6 @@ var giteaClient *gitea.Client
 var registerTmpl *template.Template
 var submitTmpl *template.Template
 var loginTmpl *template.Template
-type account struct {
-	email    string
-	username string
-	password string
-	discordUsername string
-	discordTag string
-	discordId string
-}
-type WrongAccount struct {
-	User  bool
-	Pass  bool
-	Email bool
-	DiscordUser bool
-}
-type registertmpl struct {
-	Success bool
-	WrongAccount WrongAccount
-	AlreadyEsitsInDatabase struct{
-		Username        bool
-		DiscordUsername bool
-	}
-}
-type SubmitStruct struct {
-	Success bool
-}
 type secrets_json struct {
 	DiscordToken    string `json:"discordToken"`
 	MysqlIndentify  string `json:"mysqlIndentify"`
@@ -117,4 +92,9 @@ func log(err error)  {
 
 func hashFunc(password []byte, salt []byte) []byte {
 	return argon2.IDKey(password, salt, 1, 64*1024, 4, 32)
+}
+func runTemplate(w http.ResponseWriter, template *template.Template, templateData interface{}) {
+	w.Header().Set("Content-Type", "text/html")
+	var err error = template.Execute(w, templateData)
+	log(err)
 }

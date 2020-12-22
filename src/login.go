@@ -10,8 +10,8 @@ type loginStruct struct {
 }
 var sessions hashmap.HashMap
 const sessionName string = "session"
+const sessionTimeout time.Duration = 10 * 24 * time.Hour
 func login(w http.ResponseWriter, r *http.Request) {
-	var err error
 	loginStruct := loginStruct{}
 	var login bool = false
 	if loggedIn(r) {
@@ -32,22 +32,18 @@ func login(w http.ResponseWriter, r *http.Request) {
 			cookie := http.Cookie{
 				Name: sessionName,
 				Value: key,
-				Expires: time.Now().Add(10 * 24 * time.Hour),
+				Expires: time.Now().Add(sessionTimeout),
 				HttpOnly: true,
 				Secure: true,
 			}
 			http.SetCookie(w, &cookie)
 			sessions.Set(key, username)
+			go deleteSession(key)
 			http.Redirect(w, r, "dash", http.StatusSeeOther)
-		} else {
-			w.Header().Set("Content-Type", "text/html")
-			err = loginTmpl.Execute(w, loginStruct)
-			log(err)
 		}
-	} else {
-		w.Header().Set("Content-Type", "text/html")
-		loginTmpl.Execute(w, loginStruct)
-		log(err)
+	}
+	if r.Method == http.MethodGet || !login {
+		runTemplate(w, loginTmpl, loginStruct)
 	}
 }
 
@@ -58,4 +54,9 @@ func loggedIn(r *http.Request) bool {
 	}
 	_, valid := sessions.GetStringKey(key.Value)
 	return valid
+}
+
+func deleteSession(key string) {
+	time.Sleep(sessionTimeout)
+	sessions.Del(key)
 }

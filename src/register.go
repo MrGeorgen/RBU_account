@@ -12,12 +12,36 @@ import (
 	"crypto/rand"
 	"github.com/cornelk/hashmap"
 )
+type account struct {
+	email    string
+	username string
+	password string
+	discordUsername string
+	discordTag string
+	discordId string
+}
+type WrongAccount struct {
+	User  bool
+	Pass  bool
+	Email bool
+	DiscordUser bool
+}
+type registertmpl struct {
+	Success bool
+	WrongAccount WrongAccount
+	AlreadyEsitsInDatabase struct{
+		Username        bool
+		DiscordUsername bool
+	}
+}
+type SubmitStruct struct {
+	Success bool
+}
 var cacheAccounts hashmap.HashMap
 var rusername *regexp.Regexp
 var remail *regexp2.Regexp
 var rpassword *regexp2.Regexp
 func register(w http.ResponseWriter, r *http.Request) {
-	var err error
 	registerstruct := registertmpl{}
 	if r.Method == http.MethodPost {
 		var newAccount account
@@ -60,8 +84,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token=" + token)
 		cacheAccounts.Set(token, newAccount)
 	}
-	registerReturn: err = registerTmpl.Execute(w, registerstruct)
-	log(err)
+	registerReturn: runTemplate(w, registerTmpl, registerstruct)
 }
 	func submit(w http.ResponseWriter, r *http.Request) {
 		var err error
@@ -76,7 +99,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			var account account = accInter.(account)
 			cacheAccounts.Del(token)
 			salt := make([]byte, 32)
-			_, err := rand.Read(salt)
+			_, err = rand.Read(salt)
 			log(err)
 			hash := hashFunc([]byte(account.password), salt)
 			// add user to the database
@@ -103,8 +126,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		submitReturn: err = submitTmpl.Execute(w, submitStruct)
-		log(err)
+		submitReturn: runTemplate(w, submitTmpl, submitStruct)
 	}
 func getRbuMember(user string, tag string) (*discordgo.Member, bool) {
 	allUsers, err := discord.GuildMembers(secret.DiscordServerID, "0", 1000)

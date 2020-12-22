@@ -30,6 +30,7 @@ type secrets_json struct {
 	DiscordServerID string `json:"discordServerID"`
 	MoodleToken string `json:"moodleToken"`
 	GiteaToken string `json:"giteaToken"`
+	ApiToken string `json:"apiToken"`
 }
 type config_json struct {
 	CreateGiteaAccount bool `json:"createGiteaAccount"`
@@ -81,6 +82,7 @@ func main() {
 	http.HandleFunc("/register", register)
 	http.HandleFunc("/submit", submit)
 	http.HandleFunc("/login", login)
+	http.HandleFunc("/api/accountinfo", accountApi)
 
 	http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
 }

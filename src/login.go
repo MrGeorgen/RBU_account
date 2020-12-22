@@ -32,6 +32,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			cookie := http.Cookie{
 				Name: sessionName,
 				Value: key,
+				Domain: "redstoneunion.de",
 				Expires: time.Now().Add(sessionTimeout),
 				HttpOnly: true,
 				Secure: true,

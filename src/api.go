@@ -8,7 +8,6 @@ type accountApiResponse struct {
 	DiscordUserId string `json:"discordUserId"`
 	Email string `json:"email"`
 }
-const apiPassword string = "hezgf42gfgwfg"
 func accountApi(w http.ResponseWriter, r *http.Request) {
 	var accountKey string = r.FormValue("accountkey")
 	var password string = r.FormValue("password")

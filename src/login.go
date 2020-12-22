@@ -12,10 +12,14 @@ var sessions hashmap.HashMap
 const sessionName string = "session"
 const sessionTimeout time.Duration = 10 * 24 * time.Hour
 func login(w http.ResponseWriter, r *http.Request) {
+	var redirectUrl = r.FormValue("redirecturl")
+	if redirectUrl == "" {
+		redirectUrl = "dash"
+	}
 	loginStruct := loginStruct{}
 	var login bool = false
 	if loggedIn(r) {
-		http.Redirect(w, r, "dash", http.StatusSeeOther)
+		http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
 		return
 	}
 	if r.Method == http.MethodPost {
@@ -40,7 +44,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			http.SetCookie(w, &cookie)
 			sessions.Set(key, username)
 			go deleteSession(key)
-			http.Redirect(w, r, "dash", http.StatusSeeOther)
+			http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
 		}
 	}
 	if r.Method == http.MethodGet || !login {

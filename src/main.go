@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"database/sql"
 	"encoding/json"
 	"github.com/bwmarrin/discordgo"

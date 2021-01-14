@@ -6,8 +6,6 @@ import (
 	"strings"
 	"regexp"
 	"github.com/dlclark/regexp2"
-	"context"
-	"time"
 	"code.gitea.io/sdk/gitea"
 	"crypto/rand"
 	"github.com/cornelk/hashmap"
@@ -103,14 +101,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			log(err)
 			hash := hashFunc([]byte(account.password), salt)
 			// add user to the database
-			query := "INSERT INTO account(username, email, hash, salt, discordUserId) VALUES (?, ?, ?, ?, ?)"
-			ctx, cancelfunc := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancelfunc()
-			stmt, err := db.PrepareContext(ctx, query)
-			log(err)
-			defer stmt.Close()
-			_, err = stmt.ExecContext(ctx, account.username, account.email, hash, salt, account.discordId)
-			log(err)
+			go databaseInsert("INSERT INTO account(username, email, hash, salt, discordUserId)", account.username, account.email, hash, salt, account.discordId)
 			//_, err = moodle.AddUser(account.username + "wg", account.username, account.email, account.username, account.password)
 			log(err)
 			if config.CreateGiteaAccount {

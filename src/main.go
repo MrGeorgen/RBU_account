@@ -9,12 +9,10 @@ import (
 	"github.com/zaddok/moodle"
 	"html/template"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"regexp"
 	"code.gitea.io/sdk/gitea"
 	"fmt"
-	"golang.org/x/crypto/argon2"
 )
 var discord *discordgo.Session
 var secret secrets_json
@@ -85,18 +83,4 @@ func main() {
 	http.HandleFunc("/api/accountinfo", accountApi)
 
 	http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
-}
-func log(err error)  {
-	if err!=nil {
-		panic(err)
-	}
-}
-
-func hashFunc(password []byte, salt []byte) []byte {
-	return argon2.IDKey(password, salt, 1, 64*1024, 4, 32)
-}
-func runTemplate(w http.ResponseWriter, template *template.Template, templateData interface{}) {
-	w.Header().Set("Content-Type", "text/html")
-	var err error = template.Execute(w, templateData)
-	log(err)
 }

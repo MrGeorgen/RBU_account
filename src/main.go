@@ -34,6 +34,7 @@ type secrets_json struct {
 type config_json struct {
 	CreateGiteaAccount bool `json:"createGiteaAccount"`
 	Port uint16 `json:"port"`
+	RootUrl string `json:"rootUrl"`
 }
 
 func main() {
@@ -52,6 +53,8 @@ func main() {
 	jsondata, err = ioutil.ReadAll(jsonfile)
 	log(err)
 	err = json.Unmarshal(jsondata, &config)
+	log(err)
+	jsonfile.Close()
 	discordgo.MakeIntent(discordgo.IntentsAll)
 	discord, err = discordgo.New("Bot " + secret.DiscordToken)
 	log(err)

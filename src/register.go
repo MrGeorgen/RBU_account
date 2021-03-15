@@ -79,7 +79,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		var dmChannel *discordgo.Channel
 		dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
 		log(err)
-		discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\nhttp://localhost:8080/submit?token=" + token)
+		discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\n" + config.RootUrl + "/submit?token=" + token)
 		cacheAccounts.Set(token, newAccount)
 	}
 	registerReturn: runTemplate(w, registerTmpl, registerstruct)

@@ -29,6 +29,6 @@ func databaseInsert(query string, values ...interface{}) {
 	stmt, err := db.PrepareContext(ctx, query)
 	log(err)
 	defer stmt.Close()
-	_, err = stmt.ExecContext(ctx, values)
+	_, err = stmt.ExecContext(ctx, values...)
 	log(err)
 }

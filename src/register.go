@@ -101,7 +101,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			log(err)
 			hash := hashFunc([]byte(account.password), salt)
 			// add user to the database
-			go databaseInsert("INSERT INTO account(username, email, hash, salt, discordUserId)", account.username, account.email, hash, salt, account.discordId)
+			stmtCreateAccount.Exec(account.username, account.email, hash, salt, account.discordId)
 			//_, err = moodle.AddUser(account.username + "wg", account.username, account.email, account.username, account.password)
 			log(err)
 			if config.CreateGiteaAccount {

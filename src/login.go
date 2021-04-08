@@ -3,12 +3,12 @@ import (
 	"time"
 	"net/http"
 	"bytes"
-	"github.com/cornelk/hashmap"
+	"sync"
 )
 type loginStruct struct {
 	FalsePassword bool
 }
-var sessions hashmap.HashMap
+var sessions sync.Map
 const sessionName string = "session"
 const sessionTimeout time.Duration = 10 * 24 * time.Hour
 func login(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 				Secure: true,
 			}
 			http.SetCookie(w, &cookie)
-			sessions.Set(key, username)
+			sessions.Store(key, username)
 			go deleteSession(key)
 			http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
 		}
@@ -52,15 +52,15 @@ func login(w http.ResponseWriter, r *http.Request) {
 }
 
 func loggedIn(r *http.Request) bool {
-	key, err := r.Cookie(sessionName)
+	cookie, err := r.Cookie(sessionName)
 	if err != nil {
 		return false
 	}
-	_, valid := sessions.GetStringKey(key.Value)
+	_, valid := sessions.Load(cookie.Value)
 	return valid
 }
 
 func deleteSession(key string) {
 	time.Sleep(sessionTimeout)
-	sessions.Del(key)
+	sessions.Delete(key)
 }

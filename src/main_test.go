@@ -49,7 +49,7 @@ func checkBodyByTemplate(test *testing.T, response *http.Response, template *tem
 
 func checkBody(test *testing.T, response *http.Response, expectedResponse []byte) {
 	responseBody, _ := io.ReadAll(response.Body)
-	if bytes.Equal(expectedResponse, responseBody) {
+	if !bytes.Equal(expectedResponse, responseBody) {
 		test.Errorf("unexpected body:\n%v", string(responseBody))
 	}
 }

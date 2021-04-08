@@ -8,7 +8,7 @@ import (
 	"github.com/dlclark/regexp2"
 	"code.gitea.io/sdk/gitea"
 	"crypto/rand"
-	"github.com/cornelk/hashmap"
+	"sync"
 )
 type account struct {
 	email    string
@@ -35,7 +35,9 @@ type registerStruct struct {
 type submitStruct struct {
 	Success bool
 }
-var cacheAccounts hashmap.HashMap
+var accountByToken sync.Map
+var usernameExitsMap sync.Map
+var discordUserExitsMap sync.Map
 var rusername *regexp.Regexp
 var remail *regexp2.Regexp
 var rpassword *regexp2.Regexp
@@ -67,8 +69,10 @@ func register(w http.ResponseWriter, r *http.Request) {
 		newAccount.discordId = newRbuMember.User.ID
 		{
 			var username string
-			registerStruct.AlreadyEsitsInDatabase.Username = db.QueryRow("SELECT username FROM account WHERE username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
-			registerStruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("SELECT username FROM account WHERE discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
+			_, usernameExitsInMem := usernameExitsMap.Load(newAccount.username)
+			registerStruct.AlreadyEsitsInDatabase.Username = db.QueryRow("SELECT username FROM account WHERE username = ?", newAccount.username).Scan(&username) == nil || usernameExitsInMem
+			_, discordUserExitsInMem := discordUserExitsMap.Load(newAccount.discordId)
+			registerStruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("SELECT username FROM account WHERE discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUserExitsInMem
 		}
 		registerStruct.Success = !registerStruct.WrongAccount.User && !registerStruct.WrongAccount.Pass && !registerStruct.WrongAccount.Email && !registerStruct.WrongAccount.DiscordUser && !registerStruct.AlreadyEsitsInDatabase.DiscordUsername && !registerStruct.AlreadyEsitsInDatabase.Username
 		if !registerStruct.Success {
@@ -80,7 +84,9 @@ func register(w http.ResponseWriter, r *http.Request) {
 		dmChannel, err = discord.UserChannelCreate(newRbuMember.User.ID)
 		log(err)
 		discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\n<" + config.RootUrl + "/submit?token=" + token + ">")
-		cacheAccounts.Set(token, newAccount)
+		accountByToken.Store(token, newAccount)
+		usernameExitsMap.Store(newAccount.username, nil)
+		discordUserExitsMap.Store(newAccount.discordId, nil)
 	}
 	registerReturn: runTemplate(w, registerTmpl, registerStruct)
 }
@@ -89,13 +95,14 @@ func register(w http.ResponseWriter, r *http.Request) {
 		var submitStruct submitStruct
 		token := r.FormValue("token")
 		var accInter interface{}
-		accInter, submitStruct.Success = cacheAccounts.GetStringKey(token)
+		accInter, submitStruct.Success = accountByToken.LoadAndDelete(token)
 		if !submitStruct.Success {
 			goto submitReturn
 		}
 		{
 			var account account = accInter.(account)
-			cacheAccounts.Del(token)
+			usernameExitsMap.Delete(account.username)
+			discordUserExitsMap.Delete(account.discordId)
 			salt := make([]byte, 32)
 			_, err = rand.Read(salt)
 			log(err)
@@ -128,27 +135,4 @@ func getRbuMember(user string, tag string) (*discordgo.Member, bool) {
 		}
 	}
 	return nil, false
-}
-func UsernameExistsInMem(username string) bool {
-	for key := range cacheAccounts.Iter() {
-		var accInter interface{}
-		accInter, _ = cacheAccounts.Get(key)
-		var account account = accInter.(account)
-		if account.username == username {
-			return true
-		}
-	}
-	return false
-}
-
-func discordUsernameExistsInMem(id string) bool {
-	for key := range cacheAccounts.Iter() {
-		var accInter interface{}
-		accInter, _ = cacheAccounts.Get(key)
-		var account account = accInter.(account)
-		if account.discordId == id {
-			return true
-		}
-	}
-	return false
 }

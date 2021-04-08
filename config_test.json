@@ -2,5 +2,5 @@
 	"createGiteaAccount": false,
 	"port": 8080,
 	"rootUrl": "http://localhost:8080",
-	"databaseType": "mysql"
+	"databaseType": "sqlite3"
 }

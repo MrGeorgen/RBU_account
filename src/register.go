@@ -24,7 +24,7 @@ type WrongAccount struct {
 	Email bool
 	DiscordUser bool
 }
-type registertmpl struct {
+type registerStruct struct {
 	Success bool
 	WrongAccount WrongAccount
 	AlreadyEsitsInDatabase struct{
@@ -32,7 +32,7 @@ type registertmpl struct {
 		DiscordUsername bool
 	}
 }
-type SubmitStruct struct {
+type submitStruct struct {
 	Success bool
 }
 var cacheAccounts hashmap.HashMap
@@ -40,7 +40,7 @@ var rusername *regexp.Regexp
 var remail *regexp2.Regexp
 var rpassword *regexp2.Regexp
 func register(w http.ResponseWriter, r *http.Request) {
-	registerstruct := registertmpl{}
+	registerStruct := registerStruct{}
 	if r.Method == http.MethodPost {
 		var newAccount account
 		var newRbuMember *discordgo.Member
@@ -54,24 +54,24 @@ func register(w http.ResponseWriter, r *http.Request) {
 			newAccount.discordUsername = split[0]
 			newAccount.discordTag = split[1]
 		}
-		registerstruct.WrongAccount.Email, _ = remail.MatchString(newAccount.email)
-		registerstruct.WrongAccount.Email = !registerstruct.WrongAccount.Email
-		registerstruct.WrongAccount.User = !rusername.MatchString(newAccount.username)
-		registerstruct.WrongAccount.Pass, _ = rpassword.MatchString(newAccount.password)
-		registerstruct.WrongAccount.Pass = !registerstruct.WrongAccount.Pass
-		newRbuMember, registerstruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername, newAccount.discordTag)
-		registerstruct.WrongAccount.DiscordUser = !registerstruct.WrongAccount.DiscordUser
-		if registerstruct.WrongAccount.DiscordUser {
+		registerStruct.WrongAccount.Email, _ = remail.MatchString(newAccount.email)
+		registerStruct.WrongAccount.Email = !registerStruct.WrongAccount.Email
+		registerStruct.WrongAccount.User = !rusername.MatchString(newAccount.username)
+		registerStruct.WrongAccount.Pass, _ = rpassword.MatchString(newAccount.password)
+		registerStruct.WrongAccount.Pass = !registerStruct.WrongAccount.Pass
+		newRbuMember, registerStruct.WrongAccount.DiscordUser = getRbuMember(newAccount.discordUsername, newAccount.discordTag)
+		registerStruct.WrongAccount.DiscordUser = !registerStruct.WrongAccount.DiscordUser
+		if registerStruct.WrongAccount.DiscordUser {
 			goto registerReturn
 		}
 		newAccount.discordId = newRbuMember.User.ID
 		{
 			var username string
-			registerstruct.AlreadyEsitsInDatabase.Username = db.QueryRow("SELECT username FROM account WHERE username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
-			registerstruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("SELECT username FROM account WHERE discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
+			registerStruct.AlreadyEsitsInDatabase.Username = db.QueryRow("SELECT username FROM account WHERE username = ?", newAccount.username).Scan(&username) == nil || UsernameExistsInMem(newAccount.username) // check if username exits
+			registerStruct.AlreadyEsitsInDatabase.DiscordUsername = db.QueryRow("SELECT username FROM account WHERE discordUserId = ?", newAccount.discordId).Scan(&username) == nil || discordUsernameExistsInMem(newAccount.discordId)
 		}
-		registerstruct.Success = !registerstruct.WrongAccount.User && !registerstruct.WrongAccount.Pass && !registerstruct.WrongAccount.Email && !registerstruct.WrongAccount.DiscordUser && !registerstruct.AlreadyEsitsInDatabase.DiscordUsername && !registerstruct.AlreadyEsitsInDatabase.Username
-		if !registerstruct.Success {
+		registerStruct.Success = !registerStruct.WrongAccount.User && !registerStruct.WrongAccount.Pass && !registerStruct.WrongAccount.Email && !registerStruct.WrongAccount.DiscordUser && !registerStruct.AlreadyEsitsInDatabase.DiscordUsername && !registerStruct.AlreadyEsitsInDatabase.Username
+		if !registerStruct.Success {
 			goto registerReturn
 		}
 		token, err := GenerateRandomStringURLSafe(64)
@@ -82,11 +82,11 @@ func register(w http.ResponseWriter, r *http.Request) {
 		discord.ChannelMessageSend(dmChannel.ID, "Bitte klicke auf den Link, um die Erstellung des Accounts abzuschließen.\n<" + config.RootUrl + "/submit?token=" + token + ">")
 		cacheAccounts.Set(token, newAccount)
 	}
-	registerReturn: runTemplate(w, registerTmpl, registerstruct)
+	registerReturn: runTemplate(w, registerTmpl, registerStruct)
 }
 	func submit(w http.ResponseWriter, r *http.Request) {
 		var err error
-		var submitStruct SubmitStruct
+		var submitStruct submitStruct
 		token := r.FormValue("token")
 		var accInter interface{}
 		accInter, submitStruct.Success = cacheAccounts.GetStringKey(token)

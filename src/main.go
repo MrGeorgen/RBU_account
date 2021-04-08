@@ -7,6 +7,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/dlclark/regexp2"
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/zaddok/moodle"
 	"html/template"
 	"io/ioutil"
@@ -24,6 +25,7 @@ var registerTmpl *template.Template
 var submitTmpl *template.Template
 var loginTmpl *template.Template
 var stmtCreateAccount *sql.Stmt
+var isTest bool
 type secrets_json struct {
 	DiscordToken    string `json:"discordToken"`
 	MysqlIndentify  string `json:"mysqlIndentify"`
@@ -31,17 +33,22 @@ type secrets_json struct {
 	MoodleToken string `json:"moodleToken"`
 	GiteaToken string `json:"giteaToken"`
 	ApiToken string `json:"apiToken"`
+	DiscordTestUser string `json:"discordTestUser"`
+	DiscordTestUserEmail string `json:"discordTestUserEmail"`
+	DiscordTestUserPassword string `json:"discordTestUserpassword"`
+	DiscordBotUserId string `json:"discordBotUserId"`
 }
 type config_json struct {
 	CreateGiteaAccount bool `json:"createGiteaAccount"`
 	Port uint16 `json:"port"`
 	RootUrl string `json:"rootUrl"`
+	DatabaseType string `json:"databaseType"`
 }
 
 func main() {
 	var err error
 	var jsonfile *os.File
-	jsonfile, err = os.Open("secrets.json")
+	jsonfile, err = os.Open("secrets" + testFilename() + ".json")
 	log(err)
 	var jsondata []byte
 	jsondata, err = ioutil.ReadAll(jsonfile)
@@ -49,19 +56,23 @@ func main() {
 	err = json.Unmarshal(jsondata, &secret)
 	log(err)
 	jsonfile.Close()
-	jsonfile, err = os.Open("config.json")
+	jsonfile, err = os.Open("config" + testFilename() + ".json")
 	log(err)
 	jsondata, err = ioutil.ReadAll(jsonfile)
 	log(err)
 	err = json.Unmarshal(jsondata, &config)
 	log(err)
 	jsonfile.Close()
+	if(config.DatabaseType != "mysql" && config.DatabaseType != "sqlite3") {
+		fmt.Println("Unknown database type. Use mysql or sqlite3")
+		os.Exit(1)
+	}
 	discordgo.MakeIntent(discordgo.IntentsAll)
 	discord, err = discordgo.New("Bot " + secret.DiscordToken)
 	log(err)
 	err = discord.Open()
 	log(err)
-	db, err = sql.Open("mysql", secret.MysqlIndentify)
+	db, err = sql.Open(config.DatabaseType, secret.MysqlIndentify)
 	log(err)
 	_, err = db.Exec("CREATE TABLE IF NOT EXISTS account(" +
 		"username varchar(40) NOT NULL, " +
@@ -88,5 +99,14 @@ func main() {
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/api/accountinfo", accountApi)
 
-	http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
+	if(!isTest) {
+		http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
+	}
+}
+
+func testFilename() string {
+	if(isTest) {
+		return "_test"
+	}
+	return ""
 }

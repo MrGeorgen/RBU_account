@@ -14,7 +14,7 @@ const sessionTimeout time.Duration = 10 * 24 * time.Hour
 func login(w http.ResponseWriter, r *http.Request) {
 	var redirectUrl = r.FormValue("redirecturl")
 	if redirectUrl == "" {
-		redirectUrl = "dash"
+		redirectUrl = "/"
 	}
 	loginStruct := loginStruct{}
 	var login bool = false
@@ -36,7 +36,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 			cookie := http.Cookie{
 				Name: sessionName,
 				Value: key,
-				Domain: "redstoneunion.de",
 				Expires: time.Now().Add(sessionTimeout),
 				HttpOnly: true,
 				Secure: true,

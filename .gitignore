@@ -18,3 +18,4 @@
 secrets.json
 test
 secrets_test.json
+csrf-key

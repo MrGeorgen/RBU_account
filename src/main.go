@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"code.gitea.io/sdk/gitea"
 	"fmt"
+	"github.com/gorilla/csrf"
+	"github.com/gorilla/mux"
 )
 var discord *discordgo.Session
 var secret secrets_json
@@ -94,13 +96,20 @@ func main() {
 	rusername = regexp.MustCompile("^([[:lower:]]|\\d|_|-|\\.){1,40}$")
 	rpassword = regexp2.MustCompile("^(?=.{8,255}$)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*\\W).*$", 0)
 	stmtCreateAccount, err = db.Prepare("INSERT INTO account(username, email, hash, salt, discordUserId) VALUES(?,?,?,?,?)")
-	http.HandleFunc("/register", register)
-	http.HandleFunc("/submit", submit)
-	http.HandleFunc("/login", login)
-	http.HandleFunc("/api/accountinfo", accountApi)
+	csrfKeyfile, err := os.Open("csrf-key")
+	log(err)
+	csrfKey, err := ioutil.ReadAll(csrfKeyfile)
+	log(err)
+	csrfKeyfile.Close()
+	csrfHandler := csrf.Protect(csrfKey)
+	router := mux.NewRouter()
+	router.HandleFunc("/register", register)
+	router.HandleFunc("/submit", submit)
+	router.HandleFunc("/login", login)
+	router.HandleFunc("/api/accountinfo", accountApi)
 
 	if(!isTest) {
-		http.ListenAndServe(":" + fmt.Sprint(config.Port), nil)
+		http.ListenAndServe(":" + fmt.Sprint(config.Port), csrfHandler(router))
 	}
 }
 

@@ -88,7 +88,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		usernameExitsMap.Store(newAccount.username, nil)
 		discordUserExitsMap.Store(newAccount.discordId, nil)
 	}
-	registerReturn: runTemplate(w, registerTmpl, registerStruct)
+	registerReturn: runTemplate(r, w, registerTmpl, registerStruct)
 }
 	func submit(w http.ResponseWriter, r *http.Request) {
 		var err error
@@ -124,7 +124,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		submitReturn: runTemplate(w, submitTmpl, submitStruct)
+		submitReturn: runTemplate(r, w, submitTmpl, submitStruct)
 	}
 func getRbuMember(user string, tag string) (*discordgo.Member, bool) {
 	allUsers, err := discord.GuildMembers(secret.DiscordServerID, "0", 1000)

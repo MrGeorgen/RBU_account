@@ -47,7 +47,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == http.MethodGet || !login {
-		runTemplate(w, loginTmpl, loginStruct)
+		runTemplate(r, w, loginTmpl, loginStruct)
 	}
 }
 

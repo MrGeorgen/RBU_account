@@ -64,6 +64,7 @@
 								<input class="responsive" type="text" name="discordUser"><br/>
 								<label class="responsive">Passwort:</label><br/>
 								<input class="responsive" type="password" name="password"><br/>
+								{{ .csrfField }}
 								<input type="submit" name="createAccount" value="Account erstellen"class="btn active responsive">
 							</form>
 						{{end}}

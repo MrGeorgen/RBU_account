@@ -18,7 +18,7 @@ func accountApi(w http.ResponseWriter, r *http.Request) {
 	var account accountApiResponse
 	var success bool
 	var usernameInter interface{}
-	usernameInter, success = sessions.GetStringKey(accountKey)
+	usernameInter, success = sessions.Load(accountKey)
 	account.Username = usernameInter.(string)
 	if !success {
 		http.Error(w, "Error 400 invalid session", 400)
